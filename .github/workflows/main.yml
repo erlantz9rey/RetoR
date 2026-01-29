@@ -2,8 +2,8 @@ name: Hourly Traffic Update
 
 on:
   schedule:
-    - cron: '0 * * * *'      # Se recomienda cada hora para no saturar los minutos de GitHub
-  workflow_dispatch:          # Permite ejecutarlo manualmente
+    - cron: '0 * * * *'
+  workflow_dispatch:
 
 jobs:
   build:
@@ -13,31 +13,38 @@ jobs:
       - name: Checkout repo
         uses: actions/checkout@v3
 
-      # 1. PRIMERO INSTALAR R
       - name: Setup R
         uses: r-lib/actions/setup-r@v2
+        with:
+          use-public-rspm: true # Usa binarios pre-compilados (MUCHO más rápido en Linux)
 
-      # 2. DESPUÉS LAS DEPENDENCIAS DEL SISTEMA (Para la librería 'sf')
+      # ESTE BLOQUE ES EL QUE AHORRA TIEMPO
+      - name: Cache R packages
+        uses: actions/cache@v3
+        with:
+          path: ${{ env.R_LIBS_USER }}
+          key: ${{ runner.os }}-r-${{ hashFiles('**/scripts/download_traffic.R') }}
+          restore-keys: ${{ runner.os }}-r-
+
       - name: Instalar dependencias del sistema Linux
         run: |
           sudo apt-get update
           sudo apt-get install -y libudunits2-dev libgdal-dev libgeos-dev libproj-dev
 
-      # 3. INSTALAR TODAS LAS LIBRERÍAS DE R JUNTAS
       - name: Instalar librerías de R
         run: |
-          Rscript -e 'install.packages(c("sf", "dplyr", "lubridate", "jsonlite", "httr2"))'
+          # Solo instala si no están ya en el caché
+          Rscript -e 'if (!require("sf")) install.packages("sf")'
+          Rscript -e 'if (!require("dplyr")) install.packages("dplyr")'
+          Rscript -e 'if (!require("lubridate")) install.packages("lubridate")'
 
-      # 4. EJECUTAR EL SCRIPT (Asegúrate de que la ruta coincida con tu repo)
-      - name: Run download script
+      - name: Ejecutar script de descarga
         run: Rscript scripts/download_traffic.R
 
-      # 5. GUARDAR CAMBIOS (Commit y Push)
-      - name: Commit and Push
+      - name: Guardar cambios en el repositorio
         run: |
           git config --global user.name "TrafficBot"
           git config --global user.email "actions@github.com"
-          git add data/*.geojson
-          # El '|| true' evita que el proceso falle si no hay cambios nuevos
-          git commit -m "Update traffic data: $(date)" || true
+          git add data/historico_trafico.geojson data/log_ejecucion.txt
+          git commit -m "Actualización rápida: $(date)" || true
           git push
