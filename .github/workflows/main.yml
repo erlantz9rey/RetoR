@@ -2,7 +2,7 @@ name: Hourly Traffic Update
 
 on:
   schedule:
-    - cron: '*/15 * * * *'
+    - cron: '7,23,37,53 * * * *'
   workflow_dispatch:
 
 jobs:
